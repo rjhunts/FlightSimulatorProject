@@ -31,16 +31,6 @@ public class ManeuverScript {
     }
 
     /**
-     * Loads and validates maneuvers from the CSV file.
-     * Reports any validation errors to the console.
-     *
-     * @return List of validated Maneuver objects, or empty list if validation errors occurred
-     */
-    public static List<Maneuver> loadManeuvers() {
-        return loadManeuvers(CSV_FILE);
-    }
-
-    /**
      * Loads and validates maneuvers from the specified CSV file.
      * Reports any validation errors to the console.
      * Skips blank lines and lines beginning with #.
@@ -48,6 +38,7 @@ public class ManeuverScript {
      * @param csvFile Path to the CSV file to load
      * @return List of validated Maneuver objects, or empty list if validation errors occurred
      */
+
     public static List<Maneuver> loadManeuvers(String csvFile) {
         List<Maneuver> maneuvers = new ArrayList<>();
         List<String> errors = new ArrayList<>();
@@ -133,7 +124,7 @@ public class ManeuverScript {
      */
     public static List<Maneuver> main() {
         System.out.println("Validating " + CSV_FILE + "...");
-        List<Maneuver> maneuvers = loadManeuvers();
+        List<Maneuver> maneuvers = loadManeuvers(CSV_FILE);
 
         if (maneuvers.isEmpty()) {
             System.out.println("No valid maneuvers found.");
