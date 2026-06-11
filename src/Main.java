@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Scanner;
@@ -336,74 +337,18 @@ public class Main {
                 // Allow time for the simulation to start
                 Thread.sleep(3000); // Longer initial delay
                 System.out.println("\nStarting automated flight demonstration with ultra-gentle maneuvers...");
+
+                // Load maneuvers from CSV file
+                List<ManeuverScript.Maneuver> maneuvers = ManeuverScript.loadManeuvers();
                 
-                // Start with extended stable level flight
-                roll.setTargetValue(0);
-                pitch.setTargetValue(0);
-                yaw.setTargetValue(0);
-                Thread.sleep(8000);  // 8 seconds of stable flight
-                
-                while (true) {
-                    // Stage 1: Level flight
-                    System.out.println("\nDemonstrating: Level flight");
-                    roll.setTargetValue(0);
-                    pitch.setTargetValue(0);
-                    yaw.setTargetValue(0);
-                    Thread.sleep(8000); // Long stable period
-                    
-                    // Stage 2: Ultra-gentle right turn (minimal values)
-                    System.out.println("\nDemonstrating: Ultra-gentle right turn");
-                    roll.setTargetValue(2);  // Extremely gentle bank angle (was 5)
-                    pitch.setTargetValue(0); // No pitch
-                    yaw.setTargetValue(2);   // Minimal yaw (was 5)
-                    Thread.sleep(12000);     // Extended hold for observation
-                    
-                    // Back to level
-                    roll.setTargetValue(0);
-                    pitch.setTargetValue(0);
-                    yaw.setTargetValue(0);
-                    Thread.sleep(8000);
-                    
-                    // Stage 3: Ultra-gentle left turn
-                    System.out.println("\nDemonstrating: Ultra-gentle left turn");
-                    roll.setTargetValue(-2); // Extremely gentle bank angle (was -5)
-                    pitch.setTargetValue(0); // No pitch
-                    yaw.setTargetValue(-2);  // Minimal yaw (was -5)
-                    Thread.sleep(12000);     // Extended hold for observation
-                    
-                    // Back to level
-                    roll.setTargetValue(0);
-                    pitch.setTargetValue(0);
-                    yaw.setTargetValue(0);
-                    Thread.sleep(8000);
-                    
-                    // Stage 4: Very gentle climb
-                    System.out.println("\nDemonstrating: Very gentle climb");
-                    roll.setTargetValue(0);
-                    pitch.setTargetValue(-5); // Minimal pitch up
-                    yaw.setTargetValue(0);
-                    Thread.sleep(10000);      // Hold for observation
-                    
-                    // Back to level
-                    roll.setTargetValue(0);
-                    pitch.setTargetValue(0);
-                    yaw.setTargetValue(0);
-                    Thread.sleep(8000);
-                    
-                    // Stage 5: Very gentle descent
-                    System.out.println("\nDemonstrating: Very gentle descent");
-                    roll.setTargetValue(0);
-                    pitch.setTargetValue(3);  // Minimal pitch down
-                    yaw.setTargetValue(0);
-                    Thread.sleep(10000);      // Hold for observation
-                    
-                    // Return to level for a long time
-                    System.out.println("\nReturning to level flight");
-                    roll.setTargetValue(0);
-                    pitch.setTargetValue(0);
-                    yaw.setTargetValue(0);
-                    Thread.sleep(10000);      // Long stable period
-                } 
+                for (ManeuverScript.Maneuver maneuver : maneuvers) {
+                    System.out.println("\nDemonstrating: " + maneuver);
+                    roll.setTargetValue(maneuver.roll);
+                    pitch.setTargetValue(maneuver.pitch);
+                    yaw.setTargetValue(maneuver.yaw);
+                    Thread.sleep(maneuver.seconds * 1000L);
+                }
+
             } catch (InterruptedException e) {
                 System.out.println("Demo thread interrupted.");
             }
