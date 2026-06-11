@@ -338,8 +338,8 @@ public class Main {
                 Thread.sleep(3000); // Longer initial delay
                 System.out.println("\nStarting automated flight demonstration with ultra-gentle maneuvers...");
 
-                // Load maneuvers from CSV file
-                List<ManeuverScript.Maneuver> maneuvers = ManeuverScript.loadManeuvers();
+                // Load maneuvers from ManeuverScript
+                List<ManeuverScript.Maneuver> maneuvers = ManeuverScript.main();
                 
                 for (ManeuverScript.Maneuver maneuver : maneuvers) {
                     System.out.println("\nDemonstrating: " + maneuver);
