@@ -103,6 +103,7 @@ public class AircraftGUI {
     private final DirectionControl rollControl;
     private final DirectionControl pitchControl;
     private final DirectionControl yawControl;
+    private final DirectionControlListener attitudeListener;
 
     // Optional resource monitor - if set, GUI throttles its frame rate based on
     // the latest OS CPU / memory measurements published by the monitor thread.
@@ -115,6 +116,14 @@ public class AircraftGUI {
     private double flightSpeed = 250.0;
     private double currentAltitude = 11000.0;
     private double targetAltitude = 11000.0;
+
+    /*
+     * Threading note:
+     * DirectionControl notifications run on the simulation thread, while the Swing
+     * timer runs on the Event Dispatch Thread. The listener only writes to volatile
+     * cache fields here and does not touch Swing, so each update is safely published
+     * to the EDT without violating Swing's single-thread rule.
+     */
 
     // Enhanced flight dynamics variables
     private long simulationStartTime = System.currentTimeMillis();
@@ -146,9 +155,29 @@ public class AircraftGUI {
     public AircraftGUI(DirectionControl rollControl,
                        DirectionControl pitchControl,
                        DirectionControl yawControl) {
+                        
         this.rollControl = rollControl;
         this.pitchControl = pitchControl;
         this.yawControl = yawControl;
+
+        roll = rollControl.getCurrentValue();
+        pitch = pitchControl.getCurrentValue();
+        yaw = yawControl.getCurrentValue();
+
+        attitudeListener = control -> {
+            double latestValue = control.getCurrentValue();
+            if (control == this.rollControl) {
+                roll = latestValue;
+            } else if (control == this.pitchControl) {
+                pitch = latestValue;
+            } else if (control == this.yawControl) {
+                yaw = latestValue;
+            }
+        };
+
+        this.rollControl.addListener(attitudeListener);
+        this.pitchControl.addListener(attitudeListener);
+        this.yawControl.addListener(attitudeListener);
     }
 
     public void setResourceMonitor(ResourceMonitor monitor) {
@@ -362,17 +391,13 @@ public class AircraftGUI {
     }
     
     /**
-     * Pulls roll/pitch/yaw from the simulation's DirectionControl instances and
-     * updates GUI-specific dynamics (altitude tracking and airspeed variation).
+     * Updates GUI-specific dynamics (altitude tracking and airspeed variation).
+     *
+     * The axis values are maintained by the listener cache.
      */
     private void updateAircraft() {
         long currentTime = System.currentTimeMillis();
         double timeSeconds = (currentTime - simulationStartTime) / 1000.0;
-
-        // Read orientation from the simulation's control instances.
-        roll = rollControl.getCurrentValue();
-        pitch = pitchControl.getCurrentValue();
-        yaw = yawControl.getCurrentValue();
 
         // Altitude tracking: move toward targetAltitude at up to 500 ft/min.
         double altitudeDifference = targetAltitude - currentAltitude;
@@ -489,6 +514,10 @@ public class AircraftGUI {
         if (timer != null) {
             timer.stop();
         }
+
+        rollControl.removeListener(attitudeListener);
+        pitchControl.removeListener(attitudeListener);
+        yawControl.removeListener(attitudeListener);
         
         // Shutdown thread pools
         scheduler.shutdown();
