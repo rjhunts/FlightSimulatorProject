@@ -7,6 +7,7 @@
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Direction control system for an aircraft axis. Manages a current value and a
@@ -24,6 +25,7 @@ public class DirectionControl {
     private double dampening;
     private double tolerance;
     private double maxStep;
+    private final CopyOnWriteArrayList<DirectionControlListener> listeners = new CopyOnWriteArrayList<>();
 
     // Statistics tracking
     private double totalDeviation = 0;
@@ -63,6 +65,7 @@ public class DirectionControl {
      * Update the current value based on the physics model and target.
      */
     public synchronized void update() {
+        double previousValue = currentValue;
         double deviation = targetValue - currentValue;
 
         if (trackStatistics) {
@@ -93,6 +96,34 @@ public class DirectionControl {
         } else if (currentValue > max) {
             currentValue = max;
             velocity = 0;
+        }
+
+        if (Double.compare(previousValue, currentValue) != 0) {
+            notifyListeners();
+        }
+    }
+
+    /**
+     * Registers a listener that will be notified when the control value changes.
+     */
+    public void addListener(DirectionControlListener listener) {
+        if (listener != null) {
+            listeners.addIfAbsent(listener);
+        }
+    }
+
+    /**
+     * Removes a previously registered listener.
+     */
+    public void removeListener(DirectionControlListener listener) {
+        if (listener != null) {
+            listeners.remove(listener);
+        }
+    }
+
+    private void notifyListeners() {
+        for (DirectionControlListener listener : listeners) {
+            listener.onDirectionChanged(this);
         }
     }
 
