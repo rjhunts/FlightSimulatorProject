@@ -49,6 +49,17 @@ public class Main {
         return argMap;
     }
 
+    private static boolean hasFlag(String[] args, String... flags) {
+        for (String arg : args) {
+            for (String flag : flags) {
+                if (arg.equals(flag)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     /**
      * Logs a message to the log file.
      */
@@ -89,6 +100,7 @@ public class Main {
     public static void main(String[] args) throws InterruptedException {
         // Parse command line arguments
         Map<String, String> params = parseArgs(args);
+        boolean injectFailures = hasFlag(args, "-inject-failures", "--inject-failures");
 
         // Apply the native Swing look-and-feel and announce the host OS.
         PlatformSupport.applySystemLookAndFeel();
@@ -150,11 +162,19 @@ public class Main {
 
         // Create and start threads
         Thread userInputThread = createInputThread(rollControl, pitchControl, yawControl, turbulenceEnabled, running);
-        Thread turbulenceThread = createTurbulenceThread(rollControl, pitchControl, yawControl, turbulenceEnabled, running);
-        Thread automatedDemoThread = createAutomatedDemoThread(rollControl, pitchControl, yawControl);
+        Thread turbulenceThread = new Thread(new SupervisedRunner(
+                "turbulence",
+                createTurbulenceWorker(rollControl, pitchControl, yawControl, turbulenceEnabled, running, System.currentTimeMillis(), injectFailures),
+                running::get), "turbulence");
+        Thread automatedDemoThread = new Thread(new SupervisedRunner(
+                "automated-demo",
+                createAutomatedDemoWorker(rollControl, pitchControl, yawControl, running),
+                running::get), "automated-demo");
 
         userInputThread.start();
+        turbulenceThread.setDaemon(true);
         turbulenceThread.start();
+        automatedDemoThread.setDaemon(true);
         automatedDemoThread.start();
 
         // Create and start the Swing GUI. The GUI reads orientation directly
@@ -166,7 +186,12 @@ public class Main {
         // tells the GUI to throttle its frame rate when the host is under load.
         ResourceMonitor resourceMonitor = new ResourceMonitor(1000, gui::setPerformanceLevel);
         gui.setResourceMonitor(resourceMonitor);
-        Thread resourceMonitorThread = resourceMonitor.start();
+        Thread resourceMonitorThread = new Thread(new SupervisedRunner(
+                "resource-monitor",
+                resourceMonitor,
+                running::get), "ResourceMonitor");
+        resourceMonitorThread.setDaemon(true);
+        resourceMonitorThread.start();
 
         gui.show();
         
@@ -296,62 +321,80 @@ public class Main {
     }
     
     /**
-     * Creates a thread that applies turbulence to the aircraft
+     * Creates a supervised turbulence worker.
      */
-    private static Thread createTurbulenceThread(DirectionControl roll, DirectionControl pitch, DirectionControl yaw,
-                                         AtomicBoolean turbulenceEnabled, AtomicBoolean running) {
-        return new Thread(() -> {
+    private static Runnable createTurbulenceWorker(DirectionControl roll, DirectionControl pitch, DirectionControl yaw,
+                                                  AtomicBoolean turbulenceEnabled, AtomicBoolean running,
+                                                  long simulationStartMs, boolean injectFailures) {
+        return () -> {
             Random random = new Random();
+            boolean injected3s = false;
+            boolean injected6s = false;
+            boolean injected9s = false;
 
             while (running.get()) {
+                long elapsedSeconds = (System.currentTimeMillis() - simulationStartMs) / 1000;
+                if (injectFailures) {
+                    if (!injected3s && elapsedSeconds >= 3) {
+                        injected3s = true;
+                        throw new RuntimeException("Injected turbulence failure at 3 seconds");
+                    }
+                    if (!injected6s && elapsedSeconds >= 6) {
+                        injected6s = true;
+                        throw new RuntimeException("Injected turbulence failure at 6 seconds");
+                    }
+                    if (!injected9s && elapsedSeconds >= 9) {
+                        injected9s = true;
+                        throw new RuntimeException("Injected turbulence failure at 9 seconds");
+                    }
+                }
+
                 try {
-                    // Only apply turbulence if enabled
                     if (turbulenceEnabled.get()) {
-                        // Create random jitter values to simulate turbulence
                         double rollJitter = (random.nextDouble() - 0.5) * 2.0;
                         double pitchJitter = (random.nextDouble() - 0.5) * 1.5;
                         double yawJitter = (random.nextDouble() - 0.5) * 1.0;
 
-                        // Apply jitter
                         roll.setCurrentValue(roll.getCurrentValue() + rollJitter);
                         pitch.setCurrentValue(pitch.getCurrentValue() + pitchJitter);
                         yaw.setCurrentValue(yaw.getCurrentValue() + yawJitter);
                     }
-
                     Thread.sleep(200);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     break;
                 }
             }
-        });
+        };
     }
 
     /**
-     * Creates a thread that automatically demonstrates various flight maneuvers
-     * without requiring user input - using ultra-gentle transitions
+     * Creates a supervised automated demonstration worker.
      */
-    private static Thread createAutomatedDemoThread(DirectionControl roll, DirectionControl pitch, DirectionControl yaw) {
-        return new Thread(() -> {
+    private static Runnable createAutomatedDemoWorker(DirectionControl roll, DirectionControl pitch,
+                                                     DirectionControl yaw, AtomicBoolean running) {
+        return () -> {
             try {
-                // Allow time for the simulation to start
                 Thread.sleep(3000); // Longer initial delay
                 System.out.println("\nStarting automated flight demonstration with ultra-gentle maneuvers...");
 
-                // Load maneuvers from ManeuverScript
-                List<ManeuverScript.Maneuver> maneuvers = ManeuverScript.main();
-                
-                for (ManeuverScript.Maneuver maneuver : maneuvers) {
-                    System.out.println("\nDemonstrating: " + maneuver);
-                    roll.setTargetValue(maneuver.roll);
-                    pitch.setTargetValue(maneuver.pitch);
-                    yaw.setTargetValue(maneuver.yaw);
-                    Thread.sleep(maneuver.seconds * 1000L);
+                while (running.get()) {
+                    List<ManeuverScript.Maneuver> maneuvers = ManeuverScript.main();
+                    for (ManeuverScript.Maneuver maneuver : maneuvers) {
+                        if (!running.get()) {
+                            return;
+                        }
+                        System.out.println("\nDemonstrating: " + maneuver);
+                        roll.setTargetValue(maneuver.roll);
+                        pitch.setTargetValue(maneuver.pitch);
+                        yaw.setTargetValue(maneuver.yaw);
+                        Thread.sleep(maneuver.seconds * 1000L);
+                    }
                 }
-
             } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
                 System.out.println("Demo thread interrupted.");
             }
-        });
+        };
     }
 }
